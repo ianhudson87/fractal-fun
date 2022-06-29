@@ -5,6 +5,8 @@ import numpy as np
 from PIL import Image
 import matplotlib.pyplot as plt
 from ComplexCoord import ComplexCoord
+import math
+import imageio
 
 # timeSteps: number of iterations the transformation is performed on each pixel
 # magnitudeThreshold: after all transforms are performed on a pixel, what magnitude must is be below to be drawn
@@ -18,7 +20,7 @@ def DrawFractal(horizontalRange, verticalRange, horizontalPixelsPerUnit, vertica
 
     # go through each pixel and perform the transformation
     for r in range(0, verticalPixels):
-        print("row" + str(r))
+        # print("row" + str(r))
         for c in range(0, horizontalPixels):
             ptc = PixelToCoord(r, c, horizontalRange, verticalRange, horizontalPixels, verticalPixels)
             complexCoord = ComplexCoord(ptc[0], ptc[1])
@@ -49,9 +51,9 @@ def DrawFractal(horizontalRange, verticalRange, horizontalPixelsPerUnit, vertica
                     data[r,c] = [red, blue, green]
             except OverflowError as err:
                 data[r, c] = [0, 0, 0]
-
-    plt.imshow(data)
-    plt.show()
+    return data
+    # plt.imshow(data)
+    # plt.show()
 
 def PixelToCoord(pixelRow, pixelCol, horizontalRange, verticalRange, horizontalPixels, verticalPixels):
     # find where the pixel is relative to the entire image
@@ -69,16 +71,23 @@ def PixelToCoord(pixelRow, pixelCol, horizontalRange, verticalRange, horizontalP
 
 
 def ConstantAroundCircle(radiansPerMove):
+    gifWriter = imageio.get_writer('./output/juliaCircle1.gif', mode='I')
+
     currentRadians = 0
 
-    while currentRadians < 2 * PI:
-        currentComplexCoord = ComplexCoord(cos(currentRadians), sin(currentRadians))
-        DrawFractal(horizontalRange=1,verticalRange=1.2,
-            horizontalPixelsPerUnit=10000, verticalPixelsPerUnit=10000,
-            timeSteps=30, magnitudeThreshold=3,
-            constant=ComplexCoord(0.2, 0.3))
+    while currentRadians < 2 * math.pi:
+        currentCircleCoord = ComplexCoord(math.cos(currentRadians), math.sin(currentRadians))
+        # print(currentCircleCoord)
+        data = DrawFractal(horizontalRange=1.2,verticalRange=1,
+            horizontalPixelsPerUnit=500, verticalPixelsPerUnit=500,
+            timeSteps=20, magnitudeThreshold=3,
+            constant=currentCircleCoord)
+
+        gifWriter.append_data(data)
 
         currentRadians += radiansPerMove
 
-ConstantAroundCircle(PI/10)
+    gifWriter.close()
+
+ConstantAroundCircle(math.pi/50)
 
