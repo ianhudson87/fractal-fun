@@ -2,7 +2,11 @@
 Hopefully different fractals generated with different methods. Maybe some 2D, maybe some 3D, idunno.
 
 ## Some Results
-### Fractals generated using the time-escape method
+### 1. Experiments with ray marching
+#### Infinite grid of spheres
+![](https://github.com/ianhudson87/fractal-fun/blob/main/ray-marching/output/hirezBallz.PNG)
+
+### 2. Fractals generated using the time-escape method
 #### Julia Fractals
 ![](https://github.com/ianhudson87/fractal-fun/blob/main/time-escape/output/juliaCircle1.gif)
 ![](https://github.com/ianhudson87/fractal-fun/blob/main/time-escape/output/julia-mandlebrot1.PNG)
