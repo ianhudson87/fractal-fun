@@ -85,7 +85,7 @@ class RayMarching:
         self.objects = []
 
     def Render(self):
-        imgData = self.GetImageData(192*2, 108*2, horizScreenSize=1.9, vertScreenSize=1, screenDist=0.5, cameraPos=Vector3(0,0,0), cameraRot=EulerAngle(0,-10,-20), renderDist=40, positionModulo=5)
+        imgData = self.GetImageData(192*5, 108*5, horizScreenSize=1.9, vertScreenSize=1, screenDist=1, cameraPos=Vector3(0,0,0), cameraRot=EulerAngle(0,-10,0), renderDist=50, positionModulo=5)
         plt.imshow(imgData)
         plt.show()
 
@@ -158,5 +158,5 @@ class RayMarching:
         return None
 
 rm = RayMarching()
-rm.AddObject(Sphere(center=Vector3(2.5,2.5,2.5), radius=1))
+rm.AddObject(Sphere(center=Vector3(2.5,2.5,2.5), radius=0.5))
 rm.Render()
