@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 from ComplexCoord import ComplexCoord
 import math
 import imageio
+import time
 
 # timeSteps: number of iterations the transformation is performed on each pixel
 # magnitudeThreshold: after all transforms are performed on a pixel, what magnitude must is be below to be drawn
@@ -20,7 +21,8 @@ def DrawFractal(horizontalRange, verticalRange, horizontalPixelsPerUnit, vertica
 
     # go through each pixel and perform the transformation
     for r in range(0, verticalPixels):
-        # print("row" + str(r))
+        if r%10 == 0:
+            print("row" + str(r) + " out of " + str(verticalPixels))
         for c in range(0, horizontalPixels):
             ptc = PixelToCoord(r, c, horizontalRange, verticalRange, horizontalPixels, verticalPixels)
             complexCoord = ComplexCoord(ptc[0], ptc[1])
@@ -45,9 +47,9 @@ def DrawFractal(horizontalRange, verticalRange, horizontalPixelsPerUnit, vertica
                     # print(complexCoord, prevComplexCoord)
                     speed = (complexCoord - prevComplexCoord).Magnitude()
                     # print(speed)
-                    red = max(255 - speed*10e5, 0)
-                    blue = min(100 + speed*10e5, 255)
-                    green = max(min((255 / (speed+0.0001)), 255), 0)
+                    red = max(255 - speed*200, 0)
+                    blue = max(255 - speed*200, 0)
+                    green = max(255 - speed*200, 0)
                     data[r,c] = [red, blue, green]
             except OverflowError as err:
                 data[r, c] = [0, 0, 0]
@@ -89,5 +91,15 @@ def ConstantAroundCircle(radiansPerMove):
 
     gifWriter.close()
 
-ConstantAroundCircle(math.pi/50)
+# ConstantAroundCircle(math.pi/50)
+
+data = DrawFractal(
+    horizontalRange=1,verticalRange=1.2,
+    horizontalPixelsPerUnit=200, verticalPixelsPerUnit=200,
+    timeSteps=100, magnitudeThreshold=2,
+    constant=ComplexCoord(0.25, -0.0005))
+image = Image.fromarray(data)
+image.save("./output/" + (str)((int)(time.time())) + ".tiff")
+plt.imshow(data)
+plt.show()
 
