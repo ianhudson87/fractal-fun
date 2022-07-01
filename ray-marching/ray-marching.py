@@ -4,6 +4,7 @@ import math
 import copy
 import numpy as np
 import matplotlib.pyplot as plt
+import random
 # from abc import ABC, abstractmethod
 
 class EulerAngle:
@@ -59,7 +60,11 @@ class Vector3:
         return Vector3(xNew, yNew, zNew)
         
 class Object:
+    objCount = 0
+
     def __init__(self, center:Vector3):
+        Object.objCount += 1
+        self.id = Object.objCount
         self.center = center
 
     @abstractmethod
@@ -73,19 +78,33 @@ class Sphere(Object):
 
     def DistanceEstimator(self, fromPos:Vector3) -> float:
         return (fromPos - self.center).Magnitude() - self.radius
-        
 
-class RayHit:
-    def __init__(self, travelDist:float, hitObj:Object):
-        self.travelDist = travelDist
+class RayMarchResult:
+    def __init__(self, collided:bool, hitObj:Object, travelDist:float, stepsTaken:int):
+        self.collided = collided
         self.hitObj = hitObj
+        self.travelDist = travelDist
+        self.stepsTaken = stepsTaken
 
-class RayMarching:
-    def __init__(self):
+# class RenderParameters:
+#     def __init__(self, ambientOcclusion:float):
+#         self.ambientOcclusion = ambientOcclusion # lower is more
+
+class LightingEngine:
+    def __init__(self, ambientOcclusionLevel:float):
+        self.ambOccLvl = ambientOcclusionLevel # lower is more
+
+    def ApplyAmbientOcclusion(self, currentColor:np.array, marchSteps:int) -> np.array:
+        AOPercentage = min(marchSteps, self.ambOccLvl) / self.ambOccLvl
+        return AOPercentage*np.array([0,0,0]) + (1-AOPercentage)*currentColor
+
+class RayMarchRenderer:
+    def __init__(self, lightingEngine:LightingEngine):
         self.objects = []
+        self.lightEng = lightingEngine
 
     def Render(self):
-        imgData = self.GetImageData(192*5, 108*5, horizScreenSize=1.9, vertScreenSize=1, screenDist=1, cameraPos=Vector3(0,0,0), cameraRot=EulerAngle(0,-10,0), renderDist=50, positionModulo=5)
+        imgData = self.GetImageData(192*2, 108*2, horizScreenSize=1.9, vertScreenSize=1, screenDist=1, cameraPos=Vector3(0,0,0), cameraRot=EulerAngle(0,0,0), renderDist=100, positionModulo=5)
         plt.imshow(imgData)
         plt.show()
 
@@ -114,28 +133,19 @@ class RayMarching:
 
                 # do ray march from camera in the direction towards the pixel
                 directionFromCameraToPixel = (pixelInSpace - cameraPos).Normalized() # this is the direction from the camera to the pixel on the screen
-                collision = self.DoRayMarch(cameraPos, directionFromCameraToPixel, renderDist, 0.01, positionModulo)
-                if collision is None:
-                    # didn't hit any objects
-                    imgData[row, col] = [0, 0, 0]
-                else:
-                    # imgData[row, col] = [100, 100, 255]
-                    imgData[row, col] = self.GetPixelColor(collision, renderDist)
+                rayMarchResult = self.DoRayMarch(cameraPos, directionFromCameraToPixel, renderDist, 0.01, positionModulo)
 
+                # color the pixel based on the results of the ray march
+                imgData[row, col] = self.GetPixelColor(rayMarchResult, renderDist)
         return imgData
 
-    def GetPixelColor(self, hitInfo:RayHit, renderDist:float):
-        fogPercentage = hitInfo.travelDist / renderDist # how much of color should be fog
-        objColor = np.array([100, 100, 255])
-        fogColor = np.array([20, 0, 30])
-        return fogPercentage*fogColor + (1-fogPercentage)*objColor
-
-
-    def DoRayMarch(self, startPos:Vector3, direction:Vector3, maxDist:float, collideDistThresh:float, posMod:float) -> RayHit:
+    def DoRayMarch(self, startPos:Vector3, direction:Vector3, maxDist:float, collideDistThresh:float, posMod:float) -> RayMarchResult:
         direction = direction.Normalized()
         currentPos = copy.copy(startPos)
         distTraveled = 0
+        stepsTaken = 0
         while(distTraveled < maxDist):
+            stepsTaken += 1
             if posMod is not None:
                 residualPos = Vector3(currentPos.x % posMod, currentPos.y % posMod, currentPos.z % posMod)
             else:
@@ -148,15 +158,32 @@ class RayMarching:
                 # collided with an object
                 collidedObjIdx = np.argmin(distanceEstimates)
                 collidedObj = self.objects[collidedObjIdx]
-                return RayHit(distTraveled, collidedObj)
+                return RayMarchResult(collided=True, hitObj=collidedObj, travelDist=distTraveled, stepsTaken=stepsTaken)
             
             else:
                 # haven't collided with anything. Travel the min distance (safe distance to not collide)
                 currentPos += direction * minDistance
                 distTraveled += minDistance
         # went max distance and didn't hit anything
-        return None
+        return RayMarchResult(collided=False, hitObj=None, travelDist=distTraveled, stepsTaken=stepsTaken)
 
-rm = RayMarching()
-rm.AddObject(Sphere(center=Vector3(2.5,2.5,2.5), radius=0.5))
-rm.Render()
+    def GetPixelColor(self, marchResult:RayMarchResult, renderDist:float):
+        if not marchResult.collided:
+            return np.array([0,0,0])
+
+        np.random.seed(marchResult.hitObj.id + (int)(marchResult.travelDist /5))
+        currentColor = np.random.rand((3))*255
+        currentColor = self.lightEng.ApplyAmbientOcclusion(currentColor, marchResult.stepsTaken)
+        # fogPercentage = hitInfo.travelDist / renderDist # how much of color should be fog
+        # fogPercentage = min(marchResult.stepsTaken, 50) / 50
+        # objColor = np.array([100, 100, 255])
+        # np.random.seed(marchResult.hitObj.id + (int)(marchResult.travelDist /5))
+        # objColor = np.random.rand((3))*255
+        # fogColor = np.array([20, 0, 30])
+        return currentColor
+
+
+le = LightingEngine(ambientOcclusionLevel=30)
+rmr = RayMarchRenderer(lightingEngine=le)
+rmr.AddObject(Sphere(center=Vector3(2.5,2.5,2.5), radius=0.5))
+rmr.Render()
