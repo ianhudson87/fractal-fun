@@ -80,23 +80,29 @@ class Sphere(Object):
         return (fromPos - self.center).Magnitude() - self.radius
 
 class RayMarchResult:
-    def __init__(self, collided:bool, hitObj:Object, travelDist:float, stepsTaken:int):
+    def __init__(self, collided:bool, hitObj:Object, travelDist:float, stepsTaken:int, minStepSize:float):
         self.collided = collided
         self.hitObj = hitObj
         self.travelDist = travelDist
         self.stepsTaken = stepsTaken
+        self.minStepSize = minStepSize
 
 # class RenderParameters:
 #     def __init__(self, ambientOcclusion:float):
 #         self.ambientOcclusion = ambientOcclusion # lower is more
 
 class LightingEngine:
-    def __init__(self, ambientOcclusionLevel:float):
+    def __init__(self, ambientOcclusionLevel:float, glowLevel):
         self.ambOccLvl = ambientOcclusionLevel # lower is more
+        self.glowLvl = glowLevel # higher is more
 
     def ApplyAmbientOcclusion(self, currentColor:np.array, marchSteps:int) -> np.array:
         AOPercentage = min(marchSteps, self.ambOccLvl) / self.ambOccLvl
         return AOPercentage*np.array([0,0,0]) + (1-AOPercentage)*currentColor
+
+    def ApplyGlow(self, currentColor:np.array, minStepSize):
+        glowPercentage = (1 - (min(minStepSize, self.glowLvl) / self.glowLvl))/4
+        return glowPercentage*np.array([100, 255, 100]) + (1-glowPercentage)*currentColor
 
 class RayMarchRenderer:
     def __init__(self, lightingEngine:LightingEngine):
@@ -133,7 +139,7 @@ class RayMarchRenderer:
 
                 # do ray march from camera in the direction towards the pixel
                 directionFromCameraToPixel = (pixelInSpace - cameraPos).Normalized() # this is the direction from the camera to the pixel on the screen
-                rayMarchResult = self.DoRayMarch(cameraPos, directionFromCameraToPixel, renderDist, 0.01, positionModulo)
+                rayMarchResult = self.DoRayMarch(cameraPos, directionFromCameraToPixel, renderDist, 1e-5, positionModulo)
 
                 # color the pixel based on the results of the ray march
                 imgData[row, col] = self.GetPixelColor(rayMarchResult, renderDist)
@@ -144,6 +150,7 @@ class RayMarchRenderer:
         currentPos = copy.copy(startPos)
         distTraveled = 0
         stepsTaken = 0
+        minStepSize = 9e9 # smallest step size taken in the ray march
         while(distTraveled < maxDist):
             stepsTaken += 1
             if posMod is not None:
@@ -152,20 +159,22 @@ class RayMarchRenderer:
                 residualPos = currentPos
             # calculate min distance to an object from (interpreted) current position
             distanceEstimates = [obj.DistanceEstimator(residualPos) for obj in self.objects]
-            minDistance = min(distanceEstimates)
+            travelDistance = min(distanceEstimates) # distance that we will can safely travel
 
-            if minDistance < collideDistThresh:
+            minStepSize = min(minStepSize, travelDistance)
+
+            if travelDistance < collideDistThresh:
                 # collided with an object
                 collidedObjIdx = np.argmin(distanceEstimates)
                 collidedObj = self.objects[collidedObjIdx]
-                return RayMarchResult(collided=True, hitObj=collidedObj, travelDist=distTraveled, stepsTaken=stepsTaken)
+                return RayMarchResult(collided=True, hitObj=collidedObj, travelDist=distTraveled, stepsTaken=stepsTaken, minStepSize=minStepSize)
             
             else:
                 # haven't collided with anything. Travel the min distance (safe distance to not collide)
-                currentPos += direction * minDistance
-                distTraveled += minDistance
+                currentPos += direction * travelDistance
+                distTraveled += travelDistance
         # went max distance and didn't hit anything
-        return RayMarchResult(collided=False, hitObj=None, travelDist=distTraveled, stepsTaken=stepsTaken)
+        return RayMarchResult(collided=False, hitObj=None, travelDist=distTraveled, stepsTaken=stepsTaken, minStepSize=minStepSize)
 
     def GetPixelColor(self, marchResult:RayMarchResult, renderDist:float):
         if not marchResult.collided:
@@ -173,7 +182,8 @@ class RayMarchRenderer:
 
         np.random.seed(marchResult.hitObj.id + (int)(marchResult.travelDist /5))
         currentColor = np.random.rand((3))*255
-        currentColor = self.lightEng.ApplyAmbientOcclusion(currentColor, marchResult.stepsTaken)
+        # currentColor = self.lightEng.ApplyAmbientOcclusion(currentColor, marchResult.stepsTaken)
+        currentColor = self.lightEng.ApplyGlow(currentColor, marchResult.minStepSize)
         # fogPercentage = hitInfo.travelDist / renderDist # how much of color should be fog
         # fogPercentage = min(marchResult.stepsTaken, 50) / 50
         # objColor = np.array([100, 100, 255])
@@ -183,7 +193,7 @@ class RayMarchRenderer:
         return currentColor
 
 
-le = LightingEngine(ambientOcclusionLevel=30)
+le = LightingEngine(ambientOcclusionLevel=30, glowLevel=1e-3)
 rmr = RayMarchRenderer(lightingEngine=le)
 rmr.AddObject(Sphere(center=Vector3(2.5,2.5,2.5), radius=0.5))
 rmr.Render()
