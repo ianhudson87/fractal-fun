@@ -32,6 +32,7 @@ class InfiniteSpheres(Object):
         return (residualPos - self.center).Magnitude() - self.radius
 
 class SierpinskiTetrahedron(Object):
+    # reference: http://blog.hvidtfeldts.net/index.php/2011/08/distance-estimated-3d-fractals-iii-folding-space/
     def __init__(self, vertex1:Vector3, vertex2:Vector3, vertex3:Vector3, vertex4:Vector3, iterations:int):
         self.v1 = vertex1
         self.v2 = vertex2

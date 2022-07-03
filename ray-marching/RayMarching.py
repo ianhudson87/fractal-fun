@@ -4,6 +4,9 @@ import copy
 import numpy as np
 import matplotlib.pyplot as plt
 import random
+import os
+import time
+from PIL import Image
 from Objects import *
 # from abc import ABC, abstractmethod
 
@@ -44,12 +47,15 @@ class LightingEngine:
         return glowPercentage*np.array([100, 255, 100]) + (1-glowPercentage)*currentColor
 
 class RayMarchRenderer:
-    def __init__(self, lightingEngine:LightingEngine):
+    def __init__(self, lightingEngine:LightingEngine, outFolder:str):
         self.objects = []
         self.lightEng = lightingEngine
+        self.outFolder = outFolder
 
     def Render(self):
-        imgData = self.GetImageData(700, 1000, horizScreenSize=0.7, vertScreenSize=1, screenDist=1, cameraPos=Vector3(3, -1.5, 1.3), cameraRot=EulerAngle(0,15,138), renderDist=8, collideDistThresh=1e-3)
+        imgData = self.GetImageData(700*2, 1000*2, horizScreenSize=0.7, vertScreenSize=1, screenDist=1, cameraPos=Vector3(3, -1.5, 1.3), cameraRot=EulerAngle(0,15,138), renderDist=8, collideDistThresh=1e-3)
+        image = Image.fromarray(imgData)
+        image.save(os.path.join(self.outFolder, (str)((int)(time.time())) + ".tiff"))
         plt.imshow(imgData)
         plt.show()
 
@@ -128,9 +134,9 @@ class RayMarchRenderer:
 
 
 le = LightingEngine(ambientOcclusionLevel=50, glowLevel=1e-20, fogDistance=8)
-rmr = RayMarchRenderer(lightingEngine=le)
+rmr = RayMarchRenderer(lightingEngine=le, outFolder="./output")
 # rmr.AddObject(Sphere(center=Vector3(0,0,0), radius=0.5))
 # rmr.AddObject(InfiniteSpheres(center=Vector3(2.5,2.5,2.5), radius=0.5, modulus=5))
 # rmr.AddObject(SierpinskiTetrahedron(Vector3(1,1,1), Vector3(-1,-1,1), Vector3(1,-1,-1), Vector3(-1,1,-1), 8))
-rmr.AddObject(SierpinskiTetrahedron(Vector3(1,1/(math.sqrt(3)),math.sqrt(3)), Vector3(1,math.sqrt(3),0), Vector3(2,0,0), Vector3(0,0,0), 8))
+rmr.AddObject(SierpinskiTetrahedron(Vector3(1,1/(math.sqrt(3)),math.sqrt(3)), Vector3(1,math.sqrt(3),0), Vector3(2,0,0), Vector3(0,0,0), 10))
 rmr.Render()
