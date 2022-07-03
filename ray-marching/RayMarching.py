@@ -1,3 +1,4 @@
+from graphviz import render
 import numpy as np
 import math
 import copy
@@ -5,7 +6,15 @@ import numpy as np
 import matplotlib.pyplot as plt
 import random
 from Objects import *
+import os
+from multiprocessing import Pool, freeze_support, cpu_count
 # from abc import ABC, abstractmethod
+
+# for multithreading on windows
+# if os.name == "nt":
+#     freeze_support()
+# you can use whatever, but your machine core count is usually a good choice (although maybe not the best)
+# pool = Pool(cpu_count()) 
 
 class RayMarchResult:
     def __init__(self, collided:bool, hitObj:Object, travelDist:float, stepsTaken:int, minStepSize:float):
@@ -43,46 +52,63 @@ class LightingEngine:
         glowPercentage = (1 - (min(minStepSize, self.glowLvl) / self.glowLvl))/4
         return glowPercentage*np.array([100, 255, 100]) + (1-glowPercentage)*currentColor
 
+class RenderSettings:
+    # screenSize: how many units the screen should be
+    # screenDist: how many units away the screen should be from the camera
+    # TODO: these 2 things control fov?
+    # renderDist: how long ray march should continue on for before stopping
+    def __init__(self, horizPixels:int, vertPixels:int, horizScreenSize:float, vertScreenSize:float, screenDist:float, cameraPos:Vector3, cameraRot:EulerAngle, renderDist:float, collideDistThresh:float):
+        self.horizPixels = horizPixels
+        self.vertPixels = vertPixels
+        self.horizScreenSize = horizScreenSize
+        self.vertScreenSize = vertScreenSize
+        self.screenDist = screenDist
+        self.cameraPos = cameraPos
+        self.cameraRot = cameraRot
+        self.renderDist = renderDist
+        self.collideDistThresh = collideDistThresh
+
 class RayMarchRenderer:
-    def __init__(self, lightingEngine:LightingEngine):
+    def __init__(self, lightingEngine: LightingEngine, renderSettings: RenderSettings):
         self.objects = []
         self.lightEng = lightingEngine
+        self.settings = renderSettings
 
     def Render(self):
-        imgData = self.GetImageData(700, 1000, horizScreenSize=0.7, vertScreenSize=1, screenDist=1, cameraPos=Vector3(3, -1.5, 1.3), cameraRot=EulerAngle(0,15,138), renderDist=8, collideDistThresh=1e-3)
+        imgData = self.GetImageData()
         plt.imshow(imgData)
         plt.show()
 
     def AddObject(self, object:Object):
         self.objects.append(object)
 
-    def GetImageData(self, horizPixels:int, vertPixels:int, horizScreenSize:float, vertScreenSize:float, screenDist:float, cameraPos:Vector3, cameraRot:EulerAngle, renderDist:float, collideDistThresh:float) -> np.array:
-        # screenSize: how many units the screen should be
-        # screenDist: how many units away the screen should be from the camera
-        # TODO: these 2 things control fov?
-        # renderDist: how long ray march should continue on for before stopping
-
-        imgData = np.zeros((vertPixels, horizPixels, 3), dtype=np.uint8)
+    def GetImageData(self) -> np.array:
+        s = self.settings
+        imgData = np.zeros((s.vertPixels, s.horizPixels, 3), dtype=np.uint8)
         
-        for row in range(vertPixels):
+        for row in range(s.vertPixels):
             if row%10==0:
-                print("row" + str(row) + " out of " + str(vertPixels))
-            for col in range(horizPixels):
-                # get the vector at which we need to travel to head to this pixel from the cameraPos
-                screenPercentHoriz = col / horizPixels # what percentage of the way we are along the screen
-                screenPercentVert = row / vertPixels
-                screenCenterHorizDiff = (screenPercentHoriz - 0.5) * horizScreenSize # horizontal units we are away from the center of the screen. Assuming orientation wrt the plane of the screen (ie no rotation)
-                screenCenterVertDiff = (screenPercentVert - 0.5) * vertScreenSize
-                screenCenterVectorDiff = Vector3(0, -screenCenterHorizDiff, -screenCenterVertDiff).Rotated(cameraRot)
-                pixelInSpace = (cameraPos + (Vector3(1,0,0).Rotated(cameraRot)*screenDist) + screenCenterVectorDiff) # where the pixel is in space. Assuming camera points towards (1, 0, 0) by default
-
-                # do ray march from camera in the direction towards the pixel
-                directionFromCameraToPixel = (pixelInSpace - cameraPos).Normalized() # this is the direction from the camera to the pixel on the screen
-                rayMarchResult = self.DoRayMarch(cameraPos, directionFromCameraToPixel, renderDist, collideDistThresh)
-
-                # color the pixel based on the results of the ray march
-                imgData[row, col] = self.GetPixelColor(rayMarchResult, renderDist)
+                print("row" + str(row) + " out of " + str(s.vertPixels))
+            for col in range(s.horizPixels):
+                self.PopulatePixelData(imgData, row, col)
         return imgData
+
+    def PopulatePixelData(self, imgData: np.array, row: int, col: int):
+        s = self.settings
+        # get the vector at which we need to travel to head to this pixel from the cameraPos
+        screenPercentHoriz = col / s.horizPixels # what percentage of the way we are along the screen
+        screenPercentVert = row / s.vertPixels
+        screenCenterHorizDiff = (screenPercentHoriz - 0.5) * s.horizScreenSize # horizontal units we are away from the center of the screen. Assuming orientation wrt the plane of the screen (ie no rotation)
+        screenCenterVertDiff = (screenPercentVert - 0.5) * s.vertScreenSize
+        screenCenterVectorDiff = Vector3(0, -screenCenterHorizDiff, -screenCenterVertDiff).Rotated(s.cameraRot)
+        pixelInSpace = (s.cameraPos + (Vector3(1,0,0).Rotated(s.cameraRot)*s.screenDist) + screenCenterVectorDiff) # where the pixel is in space. Assuming camera points towards (1, 0, 0) by default
+
+        # do ray march from camera in the direction towards the pixel
+        directionFromCameraToPixel = (pixelInSpace - s.cameraPos).Normalized() # this is the direction from the camera to the pixel on the screen
+        rayMarchResult = self.DoRayMarch(s.cameraPos, directionFromCameraToPixel, s.renderDist, s.collideDistThresh)
+
+        # color the pixel based on the results of the ray march
+        imgData[row, col] = self.GetPixelColor(rayMarchResult, s.renderDist)
 
     def DoRayMarch(self, startPos:Vector3, direction:Vector3, maxDist:float, collideDistThresh:float) -> RayMarchResult:
         # print("new ray march")
@@ -128,7 +154,10 @@ class RayMarchRenderer:
 
 
 le = LightingEngine(ambientOcclusionLevel=50, glowLevel=1e-20, fogDistance=8)
-rmr = RayMarchRenderer(lightingEngine=le)
+rs = RenderSettings(70, 100, horizScreenSize=0.7, vertScreenSize=1, screenDist=1,
+                    cameraPos=Vector3(3, -1.5, 1.3), cameraRot=EulerAngle(0,15,138),
+                    renderDist=8, collideDistThresh=1e-3)
+rmr = RayMarchRenderer(lightingEngine=le, renderSettings=rs)
 # rmr.AddObject(Sphere(center=Vector3(0,0,0), radius=0.5))
 # rmr.AddObject(InfiniteSpheres(center=Vector3(2.5,2.5,2.5), radius=0.5, modulus=5))
 # rmr.AddObject(SierpinskiTetrahedron(Vector3(1,1,1), Vector3(-1,-1,1), Vector3(1,-1,-1), Vector3(-1,1,-1), 8))
