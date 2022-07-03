@@ -10,14 +10,8 @@ import time
 from PIL import Image
 from Objects import *
 import os
-from multiprocessing import Pool, freeze_support, cpu_count
+from concurrent import futures
 # from abc import ABC, abstractmethod
-
-# for multithreading on windows
-# if os.name == "nt":
-#     freeze_support()
-# you can use whatever, but your machine core count is usually a good choice (although maybe not the best)
-# pool = Pool(cpu_count()) 
 
 class RayMarchResult:
     def __init__(self, collided:bool, hitObj:Object, travelDist:float, stepsTaken:int, minStepSize:float):
@@ -60,7 +54,7 @@ class RenderSettings:
     # screenDist: how many units away the screen should be from the camera
     # TODO: these 2 things control fov?
     # renderDist: how long ray march should continue on for before stopping
-    def __init__(self, horizPixels:int, vertPixels:int, horizScreenSize:float, vertScreenSize:float, screenDist:float, cameraPos:Vector3, cameraRot:EulerAngle, renderDist:float, collideDistThresh:float):
+    def __init__(self, horizPixels:int, vertPixels:int, horizScreenSize:float, vertScreenSize:float, screenDist:float, cameraPos:Vector3, cameraRot:EulerAngle, renderDist:float, collideDistThresh:float, useMultithreading:bool):
         self.horizPixels = horizPixels
         self.vertPixels = vertPixels
         self.horizScreenSize = horizScreenSize
@@ -70,6 +64,7 @@ class RenderSettings:
         self.cameraRot = cameraRot
         self.renderDist = renderDist
         self.collideDistThresh = collideDistThresh
+        self.useMultithreading = useMultithreading
 
 class RayMarchRenderer:
     def __init__(self, lightingEngine: LightingEngine, renderSettings: RenderSettings, outFolder:str):
@@ -79,7 +74,10 @@ class RayMarchRenderer:
         self.outFolder = outFolder
 
     def Render(self):
-        imgData = self.GetImageData()
+        if(self.settings.useMultithreading):
+            imgData = self.GetImageDataMultithreaded()
+        else:
+            imgData = self.GetImageData()
         image = Image.fromarray(imgData)
         image.save(os.path.join(self.outFolder, (str)((int)(time.time())) + ".tiff"))
         plt.imshow(imgData)
@@ -96,10 +94,25 @@ class RayMarchRenderer:
             if row%10==0:
                 print("row" + str(row) + " out of " + str(s.vertPixels))
             for col in range(s.horizPixels):
-                self.PopulatePixelData(imgData, row, col)
+                imgData[row, col] = self.CalculatePixelData(row, col)[0]
         return imgData
 
-    def PopulatePixelData(self, imgData: np.array, row: int, col: int):
+    def GetImageDataMultithreaded(self) -> np.array:
+        s = self.settings
+        imgData = np.zeros((s.vertPixels, s.horizPixels, 3), dtype=np.uint8)
+
+        with futures.ProcessPoolExecutor() as pool:
+            for color, row, col in pool.map(self.CalculatePixelData, [row for row in range(s.vertPixels) for col in range(s.horizPixels)], [col for row in range(s.vertPixels) for col in range(s.horizPixels)]):
+                imgData[row, col] = color
+                # print("row,col", row, col)
+        # collect all the parameters needed for function calls
+        # allArgs = [(imgData, row, col) for row in range(s.vertPixels) for col in range(s.horizPixels)]
+        
+        # self.pool.map(self.PopulatePixelDataWrapped, allArgs)
+        print(imgData)
+        return imgData
+
+    def CalculatePixelData(self, row: int, col: int):
         s = self.settings
         # get the vector at which we need to travel to head to this pixel from the cameraPos
         screenPercentHoriz = col / s.horizPixels # what percentage of the way we are along the screen
@@ -114,7 +127,7 @@ class RayMarchRenderer:
         rayMarchResult = self.DoRayMarch(s.cameraPos, directionFromCameraToPixel, s.renderDist, s.collideDistThresh)
 
         # color the pixel based on the results of the ray march
-        imgData[row, col] = self.GetPixelColor(rayMarchResult, s.renderDist)
+        return self.GetPixelColor(rayMarchResult, s.renderDist), row, col
 
     def DoRayMarch(self, startPos:Vector3, direction:Vector3, maxDist:float, collideDistThresh:float) -> RayMarchResult:
         # print("new ray march")
@@ -158,14 +171,15 @@ class RayMarchRenderer:
         currentColor = self.lightEng.ApplyLightingEffects(currentColor, marchResult)
         return currentColor
 
-
-le = LightingEngine(ambientOcclusionLevel=50, glowLevel=1e-20, fogDistance=8)
-rs = RenderSettings(70, 100, horizScreenSize=0.7, vertScreenSize=1, screenDist=1,
-                    cameraPos=Vector3(3, -1.5, 1.3), cameraRot=EulerAngle(0,15,138),
-                    renderDist=8, collideDistThresh=1e-3)
-rmr = RayMarchRenderer(lightingEngine=le, renderSettings=rs, outFolder="./output")
-# rmr.AddObject(Sphere(center=Vector3(0,0,0), radius=0.5))
-# rmr.AddObject(InfiniteSpheres(center=Vector3(2.5,2.5,2.5), radius=0.5, modulus=5))
-# rmr.AddObject(SierpinskiTetrahedron(Vector3(1,1,1), Vector3(-1,-1,1), Vector3(1,-1,-1), Vector3(-1,1,-1), 8))
-rmr.AddObject(SierpinskiTetrahedron(Vector3(1,1/(math.sqrt(3)),math.sqrt(3)), Vector3(1,math.sqrt(3),0), Vector3(2,0,0), Vector3(0,0,0), 10))
-rmr.Render()
+if __name__ == '__main__':  
+    le = LightingEngine(ambientOcclusionLevel=50, glowLevel=1e-20, fogDistance=8)
+    rs = RenderSettings(horizPixels=70*2, vertPixels=100*2, horizScreenSize=0.7, vertScreenSize=1, screenDist=1,
+                        cameraPos=Vector3(3, -1.5, 1.3), cameraRot=EulerAngle(0,15,138),
+                        renderDist=8, collideDistThresh=1e-3,
+                        useMultithreading=False)
+    rmr = RayMarchRenderer(lightingEngine=le, renderSettings=rs, outFolder="./output")
+    # rmr.AddObject(Sphere(center=Vector3(0,0,0), radius=0.5))
+    # rmr.AddObject(InfiniteSpheres(center=Vector3(2.5,2.5,2.5), radius=0.5, modulus=5))
+    # rmr.AddObject(SierpinskiTetrahedron(Vector3(1,1,1), Vector3(-1,-1,1), Vector3(1,-1,-1), Vector3(-1,1,-1), 8))
+    rmr.AddObject(SierpinskiTetrahedron(Vector3(1,1/(math.sqrt(3)),math.sqrt(3)), Vector3(1,math.sqrt(3),0), Vector3(2,0,0), Vector3(0,0,0), 10))
+    rmr.Render()
