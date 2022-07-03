@@ -160,14 +160,10 @@ class RayMarchRenderer:
 
 
 le = LightingEngine(ambientOcclusionLevel=50, glowLevel=1e-20, fogDistance=8)
-<<<<<<< HEAD
-rmr = RayMarchRenderer(lightingEngine=le, outFolder="./output")
-=======
 rs = RenderSettings(70, 100, horizScreenSize=0.7, vertScreenSize=1, screenDist=1,
                     cameraPos=Vector3(3, -1.5, 1.3), cameraRot=EulerAngle(0,15,138),
                     renderDist=8, collideDistThresh=1e-3)
-rmr = RayMarchRenderer(lightingEngine=le, renderSettings=rs)
->>>>>>> multithreading
+rmr = RayMarchRenderer(lightingEngine=le, renderSettings=rs, outFolder="./output")
 # rmr.AddObject(Sphere(center=Vector3(0,0,0), radius=0.5))
 # rmr.AddObject(InfiniteSpheres(center=Vector3(2.5,2.5,2.5), radius=0.5, modulus=5))
 # rmr.AddObject(SierpinskiTetrahedron(Vector3(1,1,1), Vector3(-1,-1,1), Vector3(1,-1,-1), Vector3(-1,1,-1), 8))
