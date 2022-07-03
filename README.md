@@ -3,6 +3,8 @@ Hopefully different fractals generated with different methods. Maybe some 2D, ma
 
 ## Some Results
 ### 1. Experiments with ray marching
+#### Sierpinski's Tetrahedons using space scaling
+![](https://github.com/ianhudson87/fractal-fun/blob/main/ray-marching/output/SierpinskiHiRezPNG.PNG)
 #### Infinite grid of spheres
 ![](https://github.com/ianhudson87/fractal-fun/blob/main/ray-marching/output/hirezBallz.PNG)
 
